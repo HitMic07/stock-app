@@ -1,101 +1,93 @@
-import streamlit as st
-import yfinance as yf
-import numpy as np
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
+import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.ensemble import RandomForestRegressor
+import streamlit as st
 
-st.set_page_config(page_title="Stock Trend Predictor", layout="centered")
-st.title('📈 Stock Trend Prediction App')
-st.markdown("Built with **Random Forest ML** + **Streamlit**")
+start = '2011-01-01'
+end = '2021-12-31'
 
-user_input = st.text_input('🔍 Enter Stock Ticker Symbol', 'SBIN.NS')
+st.title('Stock Price Prediction')
 
-raw = yf.download(user_input, start='2010-01-01', end='2023-12-31', auto_adjust=True)
+user_input = st.text_input('Enter Stock Ticker', 'AAPL')
 
-if raw.empty:
-    st.error("Could not fetch data.")
-    st.stop()
+df = yf.download(user_input, start=start, end=end, auto_adjust=True)
+df = pd.DataFrame(df['Close'])
+df.columns = ['Close']
+df.dropna(inplace=True)
 
-# Get close prices as clean 1D numpy array
-try:
-    prices = raw['Close'].values.flatten().astype(float)
-except:
-    prices = raw.iloc[:, 0].values.flatten().astype(float)
+# Describing the data
+st.subheader('Data From 2011 - 2021')
+st.write(df.describe())
 
-prices = prices[~np.isnan(prices)]  # remove any NaN values
+# Chart 1 - Closing Price
+st.subheader('Closing Price vs Time Graph')
+fig = plt.figure(figsize=(15, 6))
+plt.plot(df.Close)
+st.pyplot(fig)
 
-# ---- CHARTS ----
+# Chart 2 - 100MA
+st.subheader('Closing Price vs Time 100MA Graph')
+ma100 = df.Close.rolling(100).mean()
+fig = plt.figure(figsize=(15, 6))
+plt.plot(ma100)
+plt.plot(df.Close)
+st.pyplot(fig)
 
-st.subheader('Closing Price Over Time')
-fig1, ax1 = plt.subplots(figsize=(12,6))
-ax1.plot(prices, label='Closing Price', color='blue')
-ax1.legend()
-st.pyplot(fig1)
+# Chart 3 - 100MA and 200MA
+st.subheader('Closing Price vs Time 100MA & 200MA Graph')
+ma100 = df.Close.rolling(100).mean()
+ma200 = df.Close.rolling(200).mean()
+fig = plt.figure(figsize=(15, 6))
+plt.plot(ma100)
+plt.plot(ma200)
+plt.plot(df.Close)
+st.pyplot(fig)
 
-ma100 = pd.Series(prices).rolling(100).mean().values
-ma200 = pd.Series(prices).rolling(200).mean().values
+# 70% training, 30% testing
+data_training = pd.DataFrame(df['Close'][0:int(len(df)*0.70)])
+data_testing  = pd.DataFrame(df['Close'][int(len(df)*0.70):])
 
-st.subheader('100-Day & 200-Day Moving Average')
-fig2, ax2 = plt.subplots(figsize=(12,6))
-ax2.plot(prices, label='Closing Price', color='blue')
-ax2.plot(ma100, 'r', label='100-Day MA')
-ax2.plot(ma200, 'g', label='200-Day MA')
-ax2.legend()
-st.pyplot(fig2)
-
-# ---- ML MODEL ----
-st.subheader('Predicted Price vs Original Price')
-
-# Split raw prices FIRST before any scaling
-split = int(len(prices) * 0.70)
-train_prices = prices[:split]
-test_prices  = prices[split:]
-
-# Fit scaler ONLY on training data
 scaler = MinMaxScaler(feature_range=(0, 1))
-scaler.fit(train_prices.reshape(-1, 1))
+data_training_array = scaler.fit_transform(data_training)
 
-# Scale all prices using that scaler
-all_scaled = scaler.transform(prices.reshape(-1, 1)).flatten()
+# Build training sequences
+x_train, y_train = [], []
+for i in range(100, data_training_array.shape[0]):
+    x_train.append(data_training_array[i-100:i, 0])
+    y_train.append(data_training_array[i, 0])
+x_train, y_train = np.array(x_train), np.array(y_train)
 
-# Build sequences
-X, y = [], []
-for i in range(100, len(all_scaled)):
-    X.append(all_scaled[i-100:i])
-    y.append(all_scaled[i])
+# Train model
+with st.spinner('Training model... please wait'):
+    model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+    model.fit(x_train, y_train)
 
-X = np.array(X)
-y = np.array(y)
+# Testing
+past100_days = data_training.tail(100)
+final_df = pd.concat([past100_days, data_testing], ignore_index=True)
+input_data = scaler.fit_transform(final_df)
 
-# Split sequences same way
-X_train = X[:split-100]
-y_train = y[:split-100]
-X_test  = X[split-100:]
-y_test  = y[split-100:]
+x_test, y_test = [], []
+for i in range(100, input_data.shape[0]):
+    x_test.append(input_data[i-100:i, 0])
+    y_test.append(input_data[i, 0])
+x_test, y_test = np.array(x_test), np.array(y_test)
 
-# Train
-with st.spinner('Training model... please wait ~30 seconds'):
-    model = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1)
-    model.fit(X_train, y_train)
+y_predicted = model.predict(x_test)
 
-# Predict
-y_pred = model.predict(X_test)
+scale_factor = 1 / scaler.scale_[0]
+y_predicted = y_predicted * scale_factor
+y_test = y_test * scale_factor
 
-# Inverse transform back to real prices
-y_pred_real = scaler.inverse_transform(y_pred.reshape(-1, 1)).flatten()
-y_test_real = scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
-
-# Plot
-fig3, ax3 = plt.subplots(figsize=(12,6))
-ax3.plot(y_test_real, 'b', label='Original Price')
-ax3.plot(y_pred_real, 'r', label='Predicted Price')
-ax3.set_xlabel('Time (days)')
-ax3.set_ylabel('Stock Price')
-ax3.legend()
-st.pyplot(fig3)
-
-st.success("✅ Prediction complete! The closer red is to blue, the better the model.")
-st.markdown("---")
-st.markdown("Built with Random Forest · yfinance · scikit-learn · Streamlit")
+# Final chart - Predicted vs Actual
+st.subheader('Predicted Price Vs Actual Price Graph')
+fig2 = plt.figure(figsize=(12, 6))
+plt.plot(y_test, 'g', label='Actual Price')
+plt.plot(y_predicted, 'r', label='Predicted')
+plt.xlabel('Time')
+plt.ylabel('Price')
+plt.legend()
+st.pyplot(fig2)
