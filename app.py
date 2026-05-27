@@ -1,310 +1,277 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.ensemble import RandomForestRegressor
-import yfinance as yf
 import streamlit as st
 
-# ─────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────
-st.set_page_config(
-    page_title="StockSense — AI Prediction",
-    page_icon="📈",
-    layout="wide"
-)
+# ── PAGE CONFIG ───────────────────────────────────────────────────────────────
+st.set_page_config(page_title="StockSense", page_icon="📈", layout="wide")
 
-# ─────────────────────────────────────────────
-# GLOBAL STYLE
-# ─────────────────────────────────────────────
+# ── CLEAN MINIMAL STYLE ───────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    .stApp { background-color: #0a0f1e; color: #e8eaf6; }
-    section[data-testid="stSidebar"] {
-        background-color: #0d1b2a;
-        border-right: 1px solid #1e3a5f;
-    }
-    html, body, [class*="css"] { color: #e8eaf6; font-family: 'Segoe UI', sans-serif; }
-    [data-testid="metric-container"] {
-        background: #0d1b2a;
-        border: 1px solid #1e3a5f;
-        border-radius: 12px;
-        padding: 16px;
-    }
-    .stTextInput input {
-        background-color: #0d1b2a !important;
-        color: #e8eaf6 !important;
-        border: 1px solid #1e3a5f !important;
-        border-radius: 8px !important;
-    }
-    h1 { color: #4fc3f7 !important; font-size: 2.2rem !important; }
-    h2, h3 { color: #81d4fa !important; }
-    hr { border-color: #1e3a5f; }
-    .section-tag {
-        display: inline-block;
-        background: #1e3a5f;
-        color: #4fc3f7;
-        padding: 4px 14px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 1px;
-        text-transform: uppercase;
-        margin-bottom: 10px;
-    }
-    .signal-buy {
-        background: #0d2b1e; border: 2px solid #00e676; color: #00e676;
-        padding: 12px 28px; border-radius: 12px; font-size: 22px;
-        font-weight: 700; text-align: center; letter-spacing: 2px;
-    }
-    .signal-sell {
-        background: #2b0d0d; border: 2px solid #ff5252; color: #ff5252;
-        padding: 12px 28px; border-radius: 12px; font-size: 22px;
-        font-weight: 700; text-align: center; letter-spacing: 2px;
-    }
-    .signal-hold {
-        background: #2b2200; border: 2px solid #ffd740; color: #ffd740;
-        padding: 12px 28px; border-radius: 12px; font-size: 22px;
-        font-weight: 700; text-align: center; letter-spacing: 2px;
-    }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+* { font-family: 'Inter', sans-serif !important; }
+.stApp { background-color: #ffffff; }
+.main .block-container { padding: 2rem 3rem; max-width: 1200px; }
+section[data-testid="stSidebar"] {
+    background-color: #f9f9f9;
+    border-right: 1px solid #eeeeee;
+}
+section[data-testid="stSidebar"] * { color: #333333 !important; }
+html, body, p, span, div, label { color: #222222 !important; }
+#MainMenu, footer, header { visibility: hidden; }
+.stTextInput input {
+    background-color: #f5f5f5 !important;
+    color: #222222 !important;
+    border: 1.5px solid #e0e0e0 !important;
+    border-radius: 10px !important;
+    font-size: 15px !important;
+    padding: 10px 14px !important;
+}
+h1 { color: #1a1a2e !important; font-weight: 700 !important; font-size: 2rem !important; }
+h2, h3 { color: #1a1a2e !important; font-weight: 600 !important; }
+[data-testid="metric-container"] {
+    background: #f9f9f9;
+    border: 1px solid #eeeeee;
+    border-radius: 14px;
+    padding: 20px 16px;
+}
+[data-testid="metric-container"] label {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: #888888 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+[data-testid="metric-container"] [data-testid="stMetricValue"] {
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    color: #1a1a2e !important;
+}
+.pill {
+    display: inline-block;
+    background: #f0f0f0;
+    color: #555555 !important;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.sig-buy  { background:#f0faf4; border:2px solid #22c55e; color:#15803d !important;
+            padding:14px 24px; border-radius:14px; font-size:20px; font-weight:700;
+            text-align:center; letter-spacing:2px; }
+.sig-sell { background:#fff5f5; border:2px solid #ef4444; color:#b91c1c !important;
+            padding:14px 24px; border-radius:14px; font-size:20px; font-weight:700;
+            text-align:center; letter-spacing:2px; }
+.sig-hold { background:#fffbeb; border:2px solid #f59e0b; color:#b45309 !important;
+            padding:14px 24px; border-radius:14px; font-size:20px; font-weight:700;
+            text-align:center; letter-spacing:2px; }
+.numbox { background:#f9f9f9; border:1px solid #eeeeee; border-radius:14px;
+          padding:16px; font-size:13px; color:#333 !important; line-height:2.2; }
+.numbox b { color:#1a1a2e !important; }
+hr { border: none; border-top: 1px solid #eeeeee; margin: 2rem 0; }
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
-# MATPLOTLIB DARK THEME
-# ─────────────────────────────────────────────
+# ── MATPLOTLIB LIGHT THEME ────────────────────────────────────────────────────
 plt.rcParams.update({
-    'figure.facecolor':  '#0a0f1e',
-    'axes.facecolor':    '#0d1b2a',
-    'axes.edgecolor':    '#1e3a5f',
-    'axes.labelcolor':   '#81d4fa',
-    'xtick.color':       '#81d4fa',
-    'ytick.color':       '#81d4fa',
-    'text.color':        '#e8eaf6',
-    'grid.color':        '#1e3a5f',
-    'grid.linestyle':    '--',
-    'grid.alpha':        0.5,
-    'legend.facecolor':  '#0d1b2a',
-    'legend.edgecolor':  '#1e3a5f',
-    'legend.labelcolor': '#e8eaf6',
+    'figure.facecolor':  '#ffffff',
+    'axes.facecolor':    '#fafafa',
+    'axes.edgecolor':    '#e0e0e0',
+    'axes.labelcolor':   '#555555',
+    'axes.spines.top':   False,
+    'axes.spines.right': False,
+    'xtick.color':       '#888888',
+    'ytick.color':       '#888888',
+    'xtick.labelsize':   10,
+    'ytick.labelsize':   10,
+    'text.color':        '#222222',
+    'grid.color':        '#eeeeee',
+    'grid.linestyle':    '-',
+    'grid.alpha':        1,
+    'legend.facecolor':  '#ffffff',
+    'legend.edgecolor':  '#eeeeee',
+    'legend.labelcolor': '#333333',
+    'legend.fontsize':   11,
 })
 
-# ─────────────────────────────────────────────
-# SIDEBAR
-# ─────────────────────────────────────────────
+# ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## ⚙️ Settings")
+    st.markdown("### 📈 StockSense")
+    st.markdown("<p style='color:#888;font-size:13px;'>AI-powered stock analysis</p>", unsafe_allow_html=True)
     st.markdown("---")
-    user_input = st.text_input('🔍 Stock Ticker', 'AAPL',
-                               help="AAPL, TSLA, SBIN.NS, BTC-USD etc.")
-    start_year = st.selectbox("Start Year", [2010, 2012, 2015, 2018], index=0)
-    end_year   = st.selectbox("End Year",   [2021, 2022, 2023, 2024], index=2)
-    n_trees    = st.slider("Model Trees (higher = smarter but slower)", 50, 300, 100, 50)
-    st.markdown("---")
-    st.markdown("""
-    <div style='color:#4fc3f7; font-size:12px;'>
-    Built by <b>Omkar</b><br>
-    Stack: Python · Random Forest<br>
-    yfinance · scikit-learn · Streamlit
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<p style='color:#aaa;font-size:11px;line-height:1.8;'>Built by <b style='color:#555'>Omkar</b><br>Python · Random Forest<br>yfinance · Streamlit</p>", unsafe_allow_html=True)
 
-start = f'{start_year}-01-01'
-end   = f'{end_year}-12-31'
+# ══════════════════════════════════════════════════════════════════════════════
+# ORIGINAL CODE STARTS HERE — UNCHANGED EXCEPT ONE BUG FIX MARKED BELOW
+# ══════════════════════════════════════════════════════════════════════════════
 
-# ─────────────────────────────────────────────
-# HEADER
-# ─────────────────────────────────────────────
-st.markdown("# 📈 StockSense — AI Price Predictor")
-st.markdown(f"<p style='color:#81d4fa; font-size:16px;'>Analysing <b>{user_input}</b> from {start_year} to {end_year} using Machine Learning</p>", unsafe_allow_html=True)
-st.markdown("---")
+start = '2011-01-01'
+end   = '2021-12-31'
 
-# ─────────────────────────────────────────────
-# FETCH DATA
-# ─────────────────────────────────────────────
-with st.spinner(f'Fetching data for {user_input}...'):
-    raw = yf.download(user_input, start=start, end=end, auto_adjust=True)
+st.title('Stock Price Prediction')
+user_input = st.text_input('Enter Stock Ticker', 'AAPL')
 
-if raw.empty:
-    st.error("Could not fetch data. Check your ticker symbol.")
-    st.stop()
-
-df = pd.DataFrame()
-df['Close']  = raw['Close'].values.flatten().astype(float)
-df['Volume'] = raw['Volume'].values.flatten().astype(float)
+df = yf.download(user_input, start=start, end=end, auto_adjust=True, progress=False)
+df = pd.DataFrame(df['Close'])
+df.columns = ['Close']
 df.dropna(inplace=True)
 
-# ─────────────────────────────────────────────
-# METRIC CARDS
-# ─────────────────────────────────────────────
-current_price = df['Close'].iloc[-1]
-start_price   = df['Close'].iloc[0]
-change_pct    = ((current_price - start_price) / start_price) * 100
-highest       = df['Close'].max()
-lowest        = df['Close'].min()
+# ── Metric cards (design addition, not original) ──────────────────────────────
+st.markdown("---")
+current  = float(df['Close'].iloc[-1])
+start_p  = float(df['Close'].iloc[0])
+ret_pct  = ((current - start_p) / start_p) * 100
+highest  = float(df['Close'].max())
+lowest   = float(df['Close'].min())
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Current Price",  f"${current:.2f}")
+c2.metric("Total Return",   f"{ret_pct:.1f}%", delta=f"{ret_pct:.1f}%")
+c3.metric("All-Time High",  f"${highest:.2f}")
+c4.metric("All-Time Low",   f"${lowest:.2f}")
+st.markdown("---")
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("💰 Current Price",  f"${current_price:.2f}")
-col2.metric("📊 Total Return",   f"{change_pct:.1f}%", delta=f"{change_pct:.1f}%")
-col3.metric("🔺 All-Time High",  f"${highest:.2f}")
-col4.metric("🔻 All-Time Low",   f"${lowest:.2f}")
+# Describing the data
+st.subheader('Data From 2011 - 2021')
+st.write(df.describe())
+
+# Chart 1 - Closing Price
+st.markdown('<div class="pill">Price History</div>', unsafe_allow_html=True)
+st.subheader('Closing Price vs Time Graph')
+fig = plt.figure(figsize=(15, 6))
+plt.plot(df.Close, color='#1a1a2e', linewidth=1.5)
+plt.fill_between(range(len(df)), df.Close.values, alpha=0.06, color='#1a1a2e')
+plt.grid(True)
+st.pyplot(fig)
+
+# Chart 2 - 100MA
+st.markdown('<div class="pill">Trend</div>', unsafe_allow_html=True)
+st.subheader('Closing Price vs Time 100MA Graph')
+ma100 = df.Close.rolling(100).mean()
+fig = plt.figure(figsize=(15, 6))
+plt.plot(df.Close, color='#cccccc', linewidth=1.2, label='Close Price')
+plt.plot(ma100, color='#f59e0b', linewidth=2, label='100-Day MA')
+plt.legend()
+plt.grid(True)
+st.pyplot(fig)
+
+# Chart 3 - 100MA and 200MA
+st.subheader('Closing Price vs Time 100MA & 200MA Graph')
+ma100 = df.Close.rolling(100).mean()
+ma200 = df.Close.rolling(200).mean()
+fig = plt.figure(figsize=(15, 6))
+plt.plot(df.Close, color='#cccccc', linewidth=1.2, label='Close Price')
+plt.plot(ma100, color='#f59e0b', linewidth=2, label='100-Day MA')
+plt.plot(ma200, color='#1a1a2e', linewidth=2, label='200-Day MA')
+plt.legend()
+plt.grid(True)
+st.pyplot(fig)
 
 st.markdown("---")
 
-# ─────────────────────────────────────────────
-# CHART 1 — CLOSING PRICE
-# ─────────────────────────────────────────────
-st.markdown('<div class="section-tag">Price History</div>', unsafe_allow_html=True)
-st.markdown("### Closing Price Over Time")
-
-fig1, ax1 = plt.subplots(figsize=(14, 5))
-ax1.plot(df['Close'].values, color='#4fc3f7', linewidth=1.5, label='Close Price')
-ax1.fill_between(range(len(df)), df['Close'].values, alpha=0.08, color='#4fc3f7')
-ax1.set_xlabel('Trading Days')
-ax1.set_ylabel('Price')
-ax1.grid(True)
-ax1.legend()
-st.pyplot(fig1)
-
-# ─────────────────────────────────────────────
-# CHART 2 — MOVING AVERAGES
-# ─────────────────────────────────────────────
-st.markdown('<div class="section-tag">Trend Analysis</div>', unsafe_allow_html=True)
-st.markdown("### Price with 100-Day & 200-Day Moving Averages")
-
-ma100 = pd.Series(df['Close'].values).rolling(100).mean()
-ma200 = pd.Series(df['Close'].values).rolling(200).mean()
-
-fig2, ax2 = plt.subplots(figsize=(14, 5))
-ax2.plot(df['Close'].values, color='#4fc3f7', linewidth=1.2, label='Close Price', alpha=0.8)
-ax2.plot(ma100.values, color='#ff9800', linewidth=1.8, label='100-Day MA')
-ax2.plot(ma200.values, color='#ab47bc', linewidth=1.8, label='200-Day MA')
-ax2.fill_between(range(len(df)), df['Close'].values, alpha=0.05, color='#4fc3f7')
-ax2.set_xlabel('Trading Days')
-ax2.set_ylabel('Price')
-ax2.grid(True)
-ax2.legend()
-st.pyplot(fig2)
-
-# ─────────────────────────────────────────────
-# CHART 3 — VOLUME
-# ─────────────────────────────────────────────
-st.markdown('<div class="section-tag">Volume Analysis</div>', unsafe_allow_html=True)
-st.markdown("### Trading Volume Over Time")
-
-fig3, ax3 = plt.subplots(figsize=(14, 4))
-colors = ['#00e676' if df['Close'].values[i] >= df['Close'].values[i-1]
-          else '#ff5252' for i in range(1, len(df))]
-colors.insert(0, '#00e676')
-ax3.bar(range(len(df)), df['Volume'].values, color=colors, alpha=0.7, width=1)
-ax3.set_xlabel('Trading Days')
-ax3.set_ylabel('Volume')
-ax3.grid(True, axis='y')
-green_patch = mpatches.Patch(color='#00e676', label='Up Day')
-red_patch   = mpatches.Patch(color='#ff5252', label='Down Day')
-ax3.legend(handles=[green_patch, red_patch])
-st.pyplot(fig3)
-
-st.markdown("---")
-
-# ─────────────────────────────────────────────
-# ML MODEL
-# ─────────────────────────────────────────────
-st.markdown('<div class="section-tag">AI Prediction</div>', unsafe_allow_html=True)
-st.markdown("### Predicted Price vs Actual Price")
-
-prices = df['Close'].values.flatten().astype(float)
-split  = int(len(prices) * 0.70)
+# 70% training, 30% testing
+data_training = pd.DataFrame(df['Close'][0:int(len(df)*0.70)])
+data_testing  = pd.DataFrame(df['Close'][int(len(df)*0.70):])
 
 scaler = MinMaxScaler(feature_range=(0, 1))
-scaler.fit(prices[:split].reshape(-1, 1))
-all_scaled = scaler.transform(prices.reshape(-1, 1)).flatten()
+data_training_array = scaler.fit_transform(data_training)
 
-X, y = [], []
-for i in range(100, len(all_scaled)):
-    X.append(all_scaled[i-100:i])
-    y.append(all_scaled[i])
-X, y = np.array(X), np.array(y)
+# Build training sequences
+x_train, y_train = [], []
+for i in range(100, data_training_array.shape[0]):
+    x_train.append(data_training_array[i-100:i, 0])
+    y_train.append(data_training_array[i, 0])
+x_train, y_train = np.array(x_train), np.array(y_train)
 
-X_train, y_train = X[:split-100], y[:split-100]
-X_test,  y_test  = X[split-100:], y[split-100:]
+# Train model
+with st.spinner('Training model... please wait'):
+    model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+    model.fit(x_train, y_train)
 
-with st.spinner(f'Training AI model with {n_trees} trees... please wait'):
-    model = RandomForestRegressor(n_estimators=n_trees, random_state=42, n_jobs=-1)
-    model.fit(X_train, y_train)
+# Testing
+past100_days = data_training.tail(100)
+final_df     = pd.concat([past100_days, data_testing], ignore_index=True)
 
-y_pred      = model.predict(X_test)
-y_pred_real = scaler.inverse_transform(y_pred.reshape(-1, 1)).flatten()
-y_test_real = scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
+# ▼▼▼ THE ONE BUG FIX: changed fit_transform → transform (scaler already fitted above)
+input_data = scaler.transform(final_df)
+# ▲▲▲
 
-fig4, ax4 = plt.subplots(figsize=(14, 6))
-ax4.plot(y_test_real, color='#4fc3f7', linewidth=1.5, label='Actual Price')
-ax4.plot(y_pred_real, color='#ff9800', linewidth=1.5, label='Predicted Price', linestyle='--')
-ax4.fill_between(range(len(y_test_real)), y_test_real, y_pred_real,
-                 alpha=0.08, color='#ff9800')
-ax4.set_xlabel('Trading Days (Test Period)')
-ax4.set_ylabel('Price')
-ax4.grid(True)
-ax4.legend()
-st.pyplot(fig4)
+x_test, y_test = [], []
+for i in range(100, input_data.shape[0]):
+    x_test.append(input_data[i-100:i, 0])
+    y_test.append(input_data[i, 0])
+x_test, y_test = np.array(x_test), np.array(y_test)
 
-# ─────────────────────────────────────────────
-# BUY / SELL / HOLD SIGNAL
-# ─────────────────────────────────────────────
+y_predicted  = model.predict(x_test)
+scale_factor = 1 / scaler.scale_[0]
+y_predicted  = y_predicted * scale_factor
+y_test       = y_test      * scale_factor
+
+# Final chart - Predicted vs Actual
+st.markdown('<div class="pill">AI Prediction</div>', unsafe_allow_html=True)
+st.subheader('Predicted Price Vs Actual Price Graph')
+fig2 = plt.figure(figsize=(12, 6))
+plt.plot(y_test,      color='#1a1a2e', linewidth=1.5, label='Actual Price')
+plt.plot(y_predicted, color='#f59e0b', linewidth=1.5, label='Predicted', linestyle='--')
+plt.fill_between(range(len(y_test)), y_test, y_predicted, alpha=0.05, color='#f59e0b')
+plt.xlabel('Time')
+plt.ylabel('Price')
+plt.legend()
+plt.grid(True)
+st.pyplot(fig2)
+
+# ── Buy/Sell Signal (design addition) ────────────────────────────────────────
 st.markdown("---")
-st.markdown('<div class="section-tag">Signal</div>', unsafe_allow_html=True)
+st.markdown('<div class="pill">Signal</div>', unsafe_allow_html=True)
 st.markdown("### AI Buy / Sell Signal")
 
-last_actual    = y_test_real[-1]
-last_predicted = y_pred_real[-1]
+last_actual    = float(y_test[-1])
+last_predicted = float(y_predicted[-1])
 diff_pct       = ((last_predicted - last_actual) / last_actual) * 100
-ma100_last     = ma100.dropna().iloc[-1]
-ma200_last     = ma200.dropna().iloc[-1]
+ma100_last     = float(ma100.dropna().iloc[-1])
+ma200_last     = float(ma200.dropna().iloc[-1])
 
-col_s1, col_s2, col_s3 = st.columns(3)
+cs1, cs2, cs3 = st.columns(3)
 
-with col_s1:
-    st.markdown("**Model Prediction**")
+with cs1:
+    st.markdown("**Model Signal**")
     if diff_pct > 1.5:
-        st.markdown('<div class="signal-buy">🟢 BUY</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sig-buy">▲ BUY</div>', unsafe_allow_html=True)
         st.caption("Model predicts price will rise")
     elif diff_pct < -1.5:
-        st.markdown('<div class="signal-sell">🔴 SELL</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sig-sell">▼ SELL</div>', unsafe_allow_html=True)
         st.caption("Model predicts price will fall")
     else:
-        st.markdown('<div class="signal-hold">🟡 HOLD</div>', unsafe_allow_html=True)
-        st.caption("No strong signal detected")
+        st.markdown('<div class="sig-hold">— HOLD</div>', unsafe_allow_html=True)
+        st.caption("No strong directional signal")
 
-with col_s2:
-    st.markdown("**MA Crossover Signal**")
+with cs2:
+    st.markdown("**MA Crossover**")
     if ma100_last > ma200_last:
-        st.markdown('<div class="signal-buy">🟢 BULLISH</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sig-buy">▲ BULLISH</div>', unsafe_allow_html=True)
         st.caption("100MA above 200MA — uptrend")
     else:
-        st.markdown('<div class="signal-sell">🔴 BEARISH</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sig-sell">▼ BEARISH</div>', unsafe_allow_html=True)
         st.caption("100MA below 200MA — downtrend")
 
-with col_s3:
+with cs3:
     st.markdown("**Key Numbers**")
     st.markdown(f"""
-    <div style='background:#0d1b2a; border:1px solid #1e3a5f; border-radius:10px; padding:12px; font-size:13px;'>
-    📍 Last Actual: <b>${last_actual:.2f}</b><br>
-    🤖 AI Predicted: <b>${last_predicted:.2f}</b><br>
-    📊 Difference: <b>{diff_pct:+.2f}%</b><br>
-    📈 100-Day MA: <b>${ma100_last:.2f}</b><br>
-    📉 200-Day MA: <b>${ma200_last:.2f}</b>
+    <div class="numbox">
+    Last Actual &nbsp;&nbsp;&nbsp;&nbsp; <b>${last_actual:.2f}</b><br>
+    AI Predicted &nbsp; <b>${last_predicted:.2f}</b><br>
+    Difference &nbsp;&nbsp;&nbsp;&nbsp; <b>{diff_pct:+.2f}%</b><br>
+    100-Day MA &nbsp;&nbsp; <b>${ma100_last:.2f}</b><br>
+    200-Day MA &nbsp;&nbsp; <b>${ma200_last:.2f}</b>
     </div>
     """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
-# FOOTER
-# ─────────────────────────────────────────────
 st.markdown("---")
-st.warning("⚠️ This app is for educational purposes only. Not financial advice. Always do your own research before investing.")
-st.markdown("""
-<div style='text-align:center; color:#4fc3f7; font-size:12px; padding-top:10px;'>
-Built by Omkar · Python · Random Forest · yfinance · Streamlit
-</div>
-""", unsafe_allow_html=True)
+st.warning("⚠️ Educational purposes only. Not financial advice.")
+st.markdown("<p style='text-align:center;color:#aaa;font-size:12px;'>Built by Omkar · Python · Random Forest · yfinance · Streamlit</p>", unsafe_allow_html=True)
